@@ -617,7 +617,53 @@
             };
         }
 
-        window.addEventListener('load', init);
+        // Don't start automatically - wait for user to click
+        let isInitialized = false;
+        
+        window.addEventListener('load', async () => {
+            // Check support but don't start AR yet
+            if (!navigator.xr) {
+                showError('WebXR not supported on this device');
+                return;
+            }
+
+            const supported = await navigator.xr.isSessionSupported('immersive-ar');
+            if (!supported) {
+                showError('AR mode not supported. Please update your browser.');
+                return;
+            }
+            
+            // Show a start button
+            document.getElementById('loading').innerHTML = `
+                <div style="text-align: center;">
+                    <div style="font-size: 3em; margin-bottom: 20px;">📱</div>
+                    <div class="loading-text" style="font-size: 1.2em; margin-bottom: 30px;">Ready to Start AR</div>
+                    <button onclick="startAR()" style="
+                        background: white;
+                        color: #A8DADC;
+                        padding: 18px 40px;
+                        border: none;
+                        border-radius: 12px;
+                        font-size: 1.1em;
+                        font-weight: 600;
+                        cursor: pointer;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+                    ">Start AR Experience</button>
+                </div>
+            `;
+        });
+        
+        async function startAR() {
+            if (isInitialized) return;
+            isInitialized = true;
+            
+            document.getElementById('loading').innerHTML = `
+                <div class="loading-spinner"></div>
+                <div class="loading-text">Loading AR Experience...</div>
+            `;
+            
+            await init();
+        }
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
