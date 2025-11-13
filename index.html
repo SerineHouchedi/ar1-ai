@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>AR Distance Measurement</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #000;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #ar-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #1a1a1a;
+        }
+        
+        .ui-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+        
+        .top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 100%);
+            padding: 20px;
+            pointer-events: auto;
+        }
+        
+        .title {
+            color: #fff;
+            font-size: 1.1em;
+            font-weight: 600;
+            text-align: center;
+            letter-spacing: 0.5px;
+        }
+        
+        .status {
+            color: #B4E4CE;
+            font-size: 0.85em;
+            text-align: center;
+            margin-top: 8px;
+            font-weight: 500;
+        }
+        
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            pointer-events: none;
+        }
+        
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+        
+        .crosshair::before {
+            width: 1.5px;
+            height: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .crosshair::after {
+            height: 1.5px;
+            width: 100%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 50px;
+            height: 50px;
+            border: 2px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            animation: pulse 2s infinite ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { 
+                opacity: 0.6; 
+                transform: translate(-50%, -50%) scale(1); 
+            }
+            50% { 
+                opacity: 0.3; 
+                transform: translate(-50%, -50%) scale(1.15); 
+            }
+        }
+        
+        .bottom-controls {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);
+            padding: 25px 20px;
+            pointer-events: auto;
+        }
+        
+        .measurement-display {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 18px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .measurement-label {
+            color: #8B9A9F;
+            font-size: 0.8em;
+            margin-bottom: 8px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .distance-value {
+            font-size: 2.8em;
+            font-weight: 700;
+            color: #A8DADC;
+            line-height: 1;
+        }
+        
+        .distance-unit {
+            font-size: 0.35em;
+            color: #8B9A9F;
+            margin-left: 4px;
+            font-weight: 500;
+        }
+        
+        .distance-secondary {
+            color: #8B9A9F;
+            font-size: 0.9em;
+            margin-top: 10px;
+            font-weight: 500;
+        }
+        
+        .points-info {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+        
+        .point-indicator {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 14px;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+        
+        .point-indicator.active {
+            background: #A8DADC;
+            color: #fff;
+        }
+        
+        .point-indicator.set {
+            background: #B4E4CE;
+            color: #fff;
+        }
+        
+        .point-num {
+            font-size: 0.7em;
+            opacity: 0.8;
+            margin-bottom: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .point-status {
+            font-weight: 600;
+            font-size: 0.85em;
+        }
+        
+        .action-button {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            letter-spacing: 0.3px;
+        }
+        
+        .btn-primary {
+            background: #A8DADC;
+            color: #fff;
+        }
+        
+        .btn-primary:active {
+            transform: scale(0.97);
+            background: #96C9CB;
+        }
+        
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #A8DADC;
+            margin-top: 10px;
+        }
+        
+        .btn-secondary:active {
+            transform: scale(0.97);
+        }
+        
+        .instructions {
+            background: rgba(255, 248, 232, 0.95);
+            color: #8B7355;
+            padding: 14px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            text-align: center;
+            font-size: 0.85em;
+            line-height: 1.5;
+            font-weight: 500;
+        }
+        
+        .error-message {
+            background: rgba(244, 162, 162, 0.95);
+            color: #8B4A4A;
+            padding: 14px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 15px;
+            display: none;
+            font-size: 0.85em;
+            font-weight: 500;
+        }
+        
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #A8DADC 0%, #B4E4CE 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            color: #fff;
+        }
+        
+        .loading-spinner {
+            width: 45px;
+            height: 45px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 1em;
+            text-align: center;
+            padding: 0 30px;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading" id="loading">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading AR Experience...</div>
+    </div>
+
+    <canvas id="ar-canvas"></canvas>
+    
+    <div class="ui-overlay">
+        <div class="top-bar">
+            <div class="title">AR Distance Measurement</div>
+            <div class="status" id="status">Looking for surface...</div>
+        </div>
+        
+        <div class="crosshair"></div>
+        <div class="circle"></div>
+        
+        <div class="bottom-controls">
+            <div class="error-message" id="error"></div>
+            
+            <div class="instructions" id="instructions">
+                Point your camera at a flat surface and tap to set the first point
+            </div>
+            
+            <div class="points-info">
+                <div class="point-indicator active" id="point1">
+                    <div class="point-num">Point 1</div>
+                    <div class="point-status">Waiting</div>
+                </div>
+                <div class="point-indicator" id="point2">
+                    <div class="point-num">Point 2</div>
+                    <div class="point-status">Waiting</div>
+                </div>
+            </div>
+            
+            <div class="measurement-display" id="measurement" style="display: none;">
+                <div class="measurement-label">Distance</div>
+                <div class="distance-value">
+                    <span id="distanceCm">0</span>
+                    <span class="distance-unit">cm</span>
+                </div>
+                <div class="distance-secondary">
+                    = <span id="distanceM">0</span> meters
+                </div>
+            </div>
+            
+            <button class="action-button btn-primary" id="actionBtn" onclick="setPoint()">
+                Set First Point
+            </button>
+            <button class="action-button btn-secondary" id="resetBtn" onclick="reset()" style="display: none;">
+                New Measurement
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer;
+        let reticle, points = [];
+        let currentPoint = 0;
+        let hitTestSource = null;
+        let session = null;
+        
+        // Point spheres with pastel colors
+        const point1Sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.03, 32, 32),
+            new THREE.MeshStandardMaterial({ 
+                color: 0xA8DADC,
+                metalness: 0.2,
+                roughness: 0.7
+            })
+        );
+        
+        const point2Sphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.03, 32, 32),
+            new THREE.MeshStandardMaterial({ 
+                color: 0xB4E4CE,
+                metalness: 0.2,
+                roughness: 0.7
+            })
+        );
+        
+        let line = null;
+        let distanceLabel = null;
+
+        async function init() {
+            if (!navigator.xr) {
+                showError('WebXR not supported on this device');
+                return;
+            }
+
+            const supported = await navigator.xr.isSessionSupported('immersive-ar');
+            if (!supported) {
+                showError('AR mode not supported. Please update your browser.');
+                return;
+            }
+
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+            
+            renderer = new THREE.WebGLRenderer({
+                canvas: document.getElementById('ar-canvas'),
+                alpha: true,
+                antialias: true
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.xr.enabled = true;
+
+            // Create reticle
+            const geometry = new THREE.RingGeometry(0.12, 0.15, 32).rotateX(-Math.PI / 2);
+            const material = new THREE.MeshBasicMaterial({ color: 0xffffff, opacity: 0.7, transparent: true });
+            reticle = new THREE.Mesh(geometry, material);
+            reticle.matrixAutoUpdate = false;
+            reticle.visible = false;
+            scene.add(reticle);
+
+            // Soft lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            directionalLight.position.set(0, 5, 5);
+            scene.add(directionalLight);
+
+            try {
+                session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['hit-test']
+                });
+                
+                await renderer.xr.setSession(session);
+                session.addEventListener('end', onSessionEnded);
+                
+                const viewerSpace = await session.requestReferenceSpace('viewer');
+                hitTestSource = await session.requestHitTestSource({ space: viewerSpace });
+                
+                document.getElementById('loading').style.display = 'none';
+                updateStatus('Ready! Point at a surface');
+                
+                renderer.setAnimationLoop(render);
+            } catch (error) {
+                showError('Failed to start AR: ' + error.message);
+            }
+        }
+
+        function render(timestamp, frame) {
+            if (frame && hitTestSource) {
+                const referenceSpace = renderer.xr.getReferenceSpace();
+                const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+                if (hitTestResults.length > 0) {
+                    const hit = hitTestResults[0];
+                    const pose = hit.getPose(referenceSpace);
+                    
+                    reticle.visible = true;
+                    reticle.matrix.fromArray(pose.transform.matrix);
+                    
+                    updateStatus('Tap to set point');
+                } else {
+                    reticle.visible = false;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        function setPoint() {
+            if (!reticle.visible) return;
+
+            const position = new THREE.Vector3();
+            position.setFromMatrixPosition(reticle.matrix);
+            points.push(position.clone());
+
+            if (currentPoint === 0) {
+                point1Sphere.position.copy(position);
+                scene.add(point1Sphere);
+                
+                document.getElementById('point1').classList.remove('active');
+                document.getElementById('point1').classList.add('set');
+                document.getElementById('point1').querySelector('.point-status').textContent = 'Set ✓';
+                
+                document.getElementById('point2').classList.add('active');
+                document.getElementById('actionBtn').textContent = 'Set Second Point';
+                document.getElementById('instructions').textContent = 'Great! Now set the second point';
+                
+                currentPoint = 1;
+            } else {
+                point2Sphere.position.copy(position);
+                scene.add(point2Sphere);
+                
+                // Draw line between points with pastel color
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints([points[0], points[1]]);
+                const lineMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0xA8DADC, 
+                    linewidth: 3
+                });
+                line = new THREE.Line(lineGeometry, lineMaterial);
+                scene.add(line);
+                
+                // Calculate distance
+                const distance = points[0].distanceTo(points[1]);
+                const distanceCm = (distance * 100).toFixed(1);
+                const distanceM = distance.toFixed(2);
+                
+                // Create floating 3D text label
+                createDistanceLabel(distanceCm, distanceM);
+                
+                document.getElementById('distanceCm').textContent = distanceCm;
+                document.getElementById('distanceM').textContent = distanceM;
+                document.getElementById('measurement').style.display = 'block';
+                
+                document.getElementById('point2').classList.remove('active');
+                document.getElementById('point2').classList.add('set');
+                document.getElementById('point2').querySelector('.point-status').textContent = 'Set ✓';
+                
+                document.getElementById('actionBtn').style.display = 'none';
+                document.getElementById('resetBtn').style.display = 'block';
+                document.getElementById('instructions').style.display = 'none';
+                
+                updateStatus('Measurement complete!');
+            }
+        }
+
+        function createDistanceLabel(distanceCm, distanceM) {
+            // Create a canvas for text texture
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 512;
+            canvas.height = 256;
+            
+            // Draw background
+            context.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            context.roundRect(20, 20, 472, 216, 20);
+            context.fill();
+            
+            // Draw text
+            context.fillStyle = '#A8DADC';
+            context.font = 'bold 120px Arial';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(distanceCm + ' cm', 256, 128);
+            
+            // Create texture and sprite
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture });
+            distanceLabel = new THREE.Sprite(spriteMaterial);
+            
+            // Position at midpoint between two points
+            const midpoint = new THREE.Vector3();
+            midpoint.addVectors(points[0], points[1]).multiplyScalar(0.5);
+            midpoint.y += 0.15; // Slightly above the line
+            
+            distanceLabel.position.copy(midpoint);
+            distanceLabel.scale.set(0.3, 0.15, 1);
+            
+            scene.add(distanceLabel);
+        }
+
+        function reset() {
+            points = [];
+            currentPoint = 0;
+            
+            scene.remove(point1Sphere);
+            scene.remove(point2Sphere);
+            if (line) scene.remove(line);
+            if (distanceLabel) scene.remove(distanceLabel);
+            
+            document.getElementById('point1').classList.add('active');
+            document.getElementById('point1').classList.remove('set');
+            document.getElementById('point1').querySelector('.point-status').textContent = 'Waiting';
+            
+            document.getElementById('point2').classList.remove('active', 'set');
+            document.getElementById('point2').querySelector('.point-status').textContent = 'Waiting';
+            
+            document.getElementById('measurement').style.display = 'none';
+            document.getElementById('actionBtn').style.display = 'block';
+            document.getElementById('actionBtn').textContent = 'Set First Point';
+            document.getElementById('resetBtn').style.display = 'none';
+            document.getElementById('instructions').style.display = 'block';
+            document.getElementById('instructions').textContent = 'Point your camera at a flat surface and tap to set the first point';
+            
+            updateStatus('Ready for new measurement');
+        }
+
+        function onSessionEnded() {
+            session = null;
+            showError('AR session ended');
+        }
+
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        function showError(text) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').textContent = text;
+            document.getElementById('error').style.display = 'block';
+        }
+
+        // Polyfill for roundRect if not available
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+                if (w < 2 * r) r = w / 2;
+                if (h < 2 * r) r = h / 2;
+                this.beginPath();
+                this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r);
+                this.closePath();
+                return this;
+            };
+        }
+
+        window.addEventListener('load', init);
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
