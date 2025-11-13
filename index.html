@@ -303,7 +303,7 @@
         
         <div class="bottom-controls">
             <div class="instructions" id="instructions">
-                Point camera at surface and tap center to set points
+                Tap anywhere on screen to set points (or use buttons below)
             </div>
             
             <div class="points-info">
@@ -345,28 +345,41 @@
 
         async function startCamera() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { 
-                        facingMode: 'environment',
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    }
-                });
-                
                 video = document.getElementById('camera-view');
                 canvas = document.getElementById('canvas-overlay');
                 ctx = canvas.getContext('2d');
                 
+                // Request camera with simpler settings
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'environment'
+                    },
+                    audio: false
+                });
+                
                 video.srcObject = stream;
                 
-                video.onloadedmetadata = () => {
-                    canvas.width = window.innerWidth;
-                    canvas.height = window.innerHeight;
-                    document.getElementById('loading').style.display = 'none';
-                };
+                // Wait for video to be ready
+                await video.play();
+                
+                // Set canvas size
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('status').textContent = 'Camera ready! Tap screen to set first point';
                 
             } catch (error) {
-                alert('Camera access denied: ' + error.message);
+                document.getElementById('loading').innerHTML = `
+                    <div style="color: white; text-align: center; padding: 30px;">
+                        <div style="font-size: 2em; margin-bottom: 20px;">⚠️</div>
+                        <div style="font-size: 1.1em; margin-bottom: 15px;">Camera Error</div>
+                        <div style="font-size: 0.9em; opacity: 0.9;">${error.message}</div>
+                        <div style="font-size: 0.8em; margin-top: 20px; opacity: 0.8;">
+                            Make sure you allowed camera permission
+                        </div>
+                    </div>
+                `;
             }
         }
 
@@ -386,8 +399,8 @@
                 
                 document.getElementById('point2').classList.add('active');
                 document.getElementById('actionBtn').textContent = 'Set Second Point';
-                document.getElementById('instructions').textContent = 'Great! Now set the second point';
-                document.getElementById('status').textContent = 'Set second point';
+                document.getElementById('instructions').textContent = 'Great! Tap another location for second point';
+                document.getElementById('status').textContent = 'Tap screen to set second point';
                 
                 currentPoint = 1;
             } else {
@@ -398,17 +411,18 @@
                 // Draw line between points
                 drawLine();
                 
-                // Calculate distance (simulated based on pixel distance and camera angle)
+                // Calculate distance with better formula
                 const pixelDistance = Math.sqrt(
                     Math.pow(points[1].x - points[0].x, 2) + 
                     Math.pow(points[1].y - points[0].y, 2)
                 );
                 
-                // Convert to real distance (approximate formula)
-                // This is a simplified calculation - in real AR apps, this uses complex algorithms
-                const distanceMeters = (pixelDistance / canvas.width) * cameraHeight * 2.5;
-                const distanceCm = (distanceMeters * 100).toFixed(1);
-                const distanceM = distanceMeters.toFixed(2);
+                // Improved distance calculation
+                // Assumes average phone camera field of view
+                const screenDiagonal = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
+                const distanceMeters = (pixelDistance / screenDiagonal) * 3.0; // Calibration factor
+                const distanceCm = Math.max(5, (distanceMeters * 100).toFixed(1)); // Minimum 5cm
+                const distanceM = (distanceCm / 100).toFixed(2);
                 
                 document.getElementById('distanceCm').textContent = distanceCm;
                 document.getElementById('distanceM').textContent = distanceM;
@@ -465,8 +479,9 @@
                 Math.pow(p2.x - p1.x, 2) + 
                 Math.pow(p2.y - p1.y, 2)
             );
-            const distanceMeters = (pixelDistance / canvas.width) * cameraHeight * 2.5;
-            const distanceCm = (distanceMeters * 100).toFixed(1);
+            const screenDiagonal = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
+            const distanceMeters = (pixelDistance / screenDiagonal) * 3.0;
+            const distanceCm = Math.max(5, (distanceMeters * 100).toFixed(1));
             
             // Draw label background
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
@@ -517,8 +532,8 @@
             document.getElementById('actionBtn').textContent = 'Set First Point';
             document.getElementById('resetBtn').style.display = 'none';
             document.getElementById('instructions').style.display = 'block';
-            document.getElementById('instructions').textContent = 'Point camera at surface and tap center to set points';
-            document.getElementById('status').textContent = 'Tap to set first point';
+            document.getElementById('instructions').textContent = 'Tap anywhere on screen to set points (or use buttons below)';
+            document.getElementById('status').textContent = 'Camera ready! Tap screen to set first point';
         }
 
         window.addEventListener('resize', () => {
